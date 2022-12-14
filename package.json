@@ -1,0 +1,17 @@
+{
+  "name": "iiws",
+  "version": "1.0.0",
+  "description": "Essential tools for native http server to build websocket",
+  "main": "ws.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bylx666/iiws.git"
+  },
+  "keywords": [
+    "websocket",
+    "ws",
+    "tools"
+  ],
+  "author": "subkey",
+  "license": "MPL-2.0"
+}
