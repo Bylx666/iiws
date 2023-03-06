@@ -1,7 +1,7 @@
 {
   "name": "iiws",
   "version": "1.0.0",
-  "description": "Essential tools for native http server to build websocket",
+  "description": "Easy, essential and light websocket server for node",
   "main": "ws.js",
   "repository": {
     "type": "git",
