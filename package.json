@@ -2,7 +2,7 @@
   "name": "iiws",
   "version": "1.0.1",
   "description": "Easy, essential and light websocket server for node",
-  "main": "ws.js",
+  "main": "ws.min.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Bylx666/iiws.git"

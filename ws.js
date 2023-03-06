@@ -66,7 +66,7 @@ function parseFrameMeta(source) {
   var src = Buffer.from(source);
 
   var len7 = src[1] & 127; // 127 = 01111111
-  var len = 0;console.log(len7);
+  var len = 0;
   var lenMeta = 0;
   var masked = src[1] >= 128; // 128 = 10000000
   if(len7===127) {
