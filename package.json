@@ -1,6 +1,6 @@
 {
   "name": "iiws",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Easy, essential and light websocket server for node",
   "main": "ws.min.js",
   "repository": {
