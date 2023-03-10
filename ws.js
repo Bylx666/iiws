@@ -1,45 +1,35 @@
 
 /**
- * Create a text Frame for ws
- * @param { String|Buffer } content content of frame
+ * Create a text Frame for ws server
+ * see Frame format in readme.md
+ * @param { String | Buffer } content content of frame
  * @param { Object } options options
  * @param { Number } options.opcode
- * @param { Boolean } options.fin whether as a fragment
  * @returns { Buffer } frame buffer
- * |opcode|conception               |
- * |:---- | :----                   |
- * |0x0   |means a fragment         |
- * |0x1   |means a TEXT frame       |
- * |0x2   |a BINARY frame           |
- * |0x3->7|reserved code            |
- * |0x8   |means disconnecting      |
- * |0x9   |means a `ping` operation |
- * |0xA   |means a `pong` operation |
- * |0xB->F|reserved code            |
  */
 function createFrame(content, options) {
   
-  var len = Buffer.byteLength(content);
+  var len = Buffer.byteLength(content); // length of the content
 
   var buf = null;
-  if(len>65535) {
+  if(len>65535) { // 65536 is the max of 16 bits
 
     buf = Buffer.alloc(10+len);
-    buf[1] = 127;
-    buf.writeUInt32BE(len ,6);
-    buf.write(content, 10);
+    buf[1] = 127; // 127 = 01111111 means using more 64 bits to save the length, using no masks. `len7` is this byte.
+    buf.writeUInt32BE(len ,6); // skip the 127 and 4 bytes to write the content length in 32 bits (32 bits = 4 bytes)
+    buf.write(content, 10); // write content here, 10 = 6 + 4
 
-  }else if(len>125) {
+  }else if(len>125) { 
 
     buf = Buffer.alloc(4+len);
-    buf[1] = 126;
-    buf.writeUInt16BE(len, 2);
+    buf[1] = 126; // 126 = 01111110 means using more 16 bit
+    buf.writeUInt16BE(len, 2); // skip the 126 and write length in 16 bits (16 bits = 2 bytes)
     buf.write(content, 4);
 
   }else {
 
     buf = Buffer.alloc(2+len);
-    buf[1] = len;
+    buf[1] = len; // if len7 !== 126 or len7 !== 127, len7 is the content length.
     buf.write(content, 2);
 
   }
@@ -47,11 +37,11 @@ function createFrame(content, options) {
   if(options) {
 
     const opcode = options.opcode;
-    if(opcode&&opcode<15&&opcode>=0) buf[0] = 128|opcode;
+    if(opcode&&opcode<15&&opcode>=0) buf[0] = 128|opcode; // 128 = 10000000, opcode is of the last 4 bits
 
   }
 
-  else buf[0] = 129;
+  else buf[0] = 129; // 129 = 10000001, opcode = 0x1
 
   return buf;
 
@@ -60,15 +50,16 @@ function createFrame(content, options) {
 /**
  * Parse meta of a frame from client
  * @param {Buffer} source client buffer Source
+ * @returns { Object }
  */
 function parseFrameMeta(source) {
 
   var src = Buffer.from(source);
 
-  var len7 = src[1] & 127; // 127 = 01111111
-  var len = 0;
-  var lenMeta = 0;
-  var masked = src[1] >= 128; // 128 = 10000000
+  var len7 = src[1] & 127; // 127 = 01111111, len7 is of the last 7 bits from the second byte.
+  var len = 0; // content length
+  var lenMeta = 0; // total length of the frame without the content
+  var masked = src[1] >= 128; // 128 = 10000000, the first bit is `masked`, if true it is >= 128
   if(len7===127) {
 
     len = src.readUInt32BE(6);
@@ -100,8 +91,8 @@ function parseFrameMeta(source) {
 
 /**
  * ws inverse mask
- * @param {String} data 源数据
- * @param {Buffer|Array} key 4位数掩码键
+ * @param {String} data source data
+ * @param {Buffer|Array} key 4 bytes masking key
  * @returns {String}
  */
 function imask(data, key) {
@@ -109,12 +100,13 @@ function imask(data, key) {
   if(!key) return data;
 
   var d = Buffer.from(data);
-  for(let i = 0; i < d.length; ++i) d[i] = d[i] ^ key[i % 4];
+  for(let i = 0; i < d.length; ++i) d[i] = d[i] ^ key[i % 4]; // 4 in a group to run XOR
   return d;
 
 }
 
 /**
+ * rewrited EventEmitter
  * @constructor
  */
 function Event() {
@@ -144,11 +136,11 @@ function Event() {
 /**
  * Create a WebSocket Server
  * @constructor
- * @param { Server } server server from http(s).createServer()
+ * @param { http.Server } server server from http(s).createServer()
  */
 function WSS(server) {
 
-  Event.call(this);
+  Event.call(this); // bind WSS to Event to get event feature
 
   var clients = [];
 
@@ -167,11 +159,10 @@ function WSS(server) {
       "HTTP/1.1 101 Switching Protocols",
       "Upgrade: websocket",
       "Connection: Upgrade",
-      "Access-Control-Allow-Origin: *",
       "Sec-WebSocket-Accept: "+require("crypto").createHash("sha1").update(req.headers['sec-websocket-key']+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64")
     ].join("\n")+"\n\n");
     
-    var cli = {
+    var cli = { // this is the `cli` parameter  when you `connect`
       send(data, options) {
 
         socket.write(createFrame(data, options));
@@ -190,37 +181,39 @@ function WSS(server) {
       close() {
 
         var cliI = clients.indexOf(cli);
-        if(cliI!==-1) clients.splice(clients.indexOf(cli), 1);
-        socket.write(createFrame("", {opcode: 8}));
+        if(cliI===-1) return false;
+        clients.splice(clients.indexOf(cli), 1); // remove client from clients' list
+        socket.write(createFrame("", {opcode: 8})); // send close message to client
         cli.emit("close");
         socket.destroy();
 
       },
-      socket: socket
+      socket: socket // you can use `cli.socket` to get the socket object
     };
     Event.call(cli);
-    this.emit("connect", cli);
-    clients.push(cli);
+
+    this.emit("connect", cli); // trigger `connect` event in ws
+    clients.push(cli); // push client to clients' list
     
-    var buf = Buffer.allocUnsafe(0);
-    var messageData = Buffer.allocUnsafe(0);
-    var dataList = [];
+    var buf = Buffer.allocUnsafe(0); // unprocessed buffer data
+    var messageData = Buffer.allocUnsafe(0); // when a `fin(al)` frame processes, the processed data sends to `message` event
+    var dataList = []; // unprocessed data list for consuming `buf`
     var frameEnd = true;
     function nextFrame() {
 
-      frameEnd = false;
-      var m = parseFrameMeta(buf);
-      dataList.push({l: m.lenMeta, f: ()=> {
-        
-        dataList.push({l: m.len, f: (d)=> {
+      var meta = parseFrameMeta(buf);
+      dataList.push({l: meta.lenMeta, f: ()=> { // consume `meta.lenMeta` bytes
 
-          messageData = Buffer.concat([ messageData, imask(d, m.maskKey) ]);
-          frameEnd = true;
-          if(m.fin) {
+        frameEnd = false; // means it is processing meta data, this frame is not completely processed
+        dataList.push({l: meta.len, f: (d)=> { // consume `meta.len` bytes
+
+          messageData = Buffer.concat([ messageData, imask(d, meta.maskKey) ]); // message += inverse masked data
+          frameEnd = true; // set true to start processing a new frame when next `data` comes
+          if(meta.fin) { // sometimes you get fragments, before `fin(al)` is true, the message is not completely processed.
             
-            if(m.opcode===8) return cli.close();
-            if(m.opcode===9) return cli.pong();
-            cli.emit("message", messageData);
+            if(meta.opcode===8) return cli.close();
+            if(meta.opcode===9) return cli.pong();
+            cli.emit("message", messageData); // trigger message event, you finally get this message
             messageData = Buffer.allocUnsafe(0);
 
           }
@@ -230,16 +223,17 @@ function WSS(server) {
       }});
 
     }
-    socket.on("data", (c)=> {
 
-      buf = Buffer.concat([buf, c]);
+    socket.on("data", (chunk)=> { // chunk is the unprocessed data
+
+      buf = Buffer.concat([buf, chunk]); // buf += chunk
       if(frameEnd) nextFrame();
-      while(dataList[0]&&buf.byteLength >= dataList[0].l) {
+      while(dataList[0]&&buf.byteLength >= dataList[0].l) { // consume `buf` by `dataList`
         
-        const l = dataList[0].l;
-        dataList[0].f(buf.subarray(0, l));
-        buf = buf.subarray(l);
-        dataList.splice(0, 1);
+        const l = dataList[0].l; // consuming length
+        dataList[0].f(buf.subarray(0, l)); // run callback before consuming
+        buf = buf.subarray(l); // consume `buf`
+        dataList.splice(0, 1); // remove this consume data
 
       }
 
